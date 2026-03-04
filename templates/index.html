@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SmartExamAI</title>
+</head>
+<body>
+
+<h2>Upload Notes PDF</h2>
+
+<form method="POST" enctype="multipart/form-data">
+    <input type="file" name="file" required><br><br>
+
+    <label>No. of MCQ:</label>
+    <input type="number" name="mcqCount" value="2"><br><br>
+
+    <label>No. of 2 Marks Questions:</label>
+    <input type="number" name="twoMarkCount" value="2"><br><br>
+
+    <label>Select Difficulty Level:</label>
+    <select name="difficulty">
+        <option value="Easy">Easy</option>
+        <option value="Medium">Medium</option>
+        <option value="Hard">Hard</option>
+    </select><br><br>
+
+    <button type="submit">Generate Questions</button>
+</form>
+
+<hr>
+
+<h3>Generated Questions:</h3>
+<pre>{{ questions }}</pre>
+
+{% if question_list %}
+<hr>
+<button onclick="startTest()">Start Test</button>
+<div id="examArea"></div>
+{% endif %}
+
+<script>
+
+let questions = {{ question_list | tojson | safe }};
+let currentQuestionIndex = 0;
+let recognition;
+let mediaRecorder;
+let audioChunks = [];
+let finalTranscript = "";
+let allAnswers = [];
+
+function speak(text, rate=0.85) {
+    let msg = new SpeechSynthesisUtterance(text);
+    msg.rate = rate;
+    msg.pitch = 1;
+    msg.volume = 1;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(msg);
+}
+
+function startTest() {
+    currentQuestionIndex = 0;
+    allAnswers = [];
+    document.getElementById("examArea").innerHTML = "";
+    showQuestion();
+}
+
+function showQuestion() {
+
+    if (currentQuestionIndex >= questions.length) {
+        checkBlanks();
+        return;
+    }
+
+    document.getElementById("examArea").innerHTML = `
+        <h3>Question ${currentQuestionIndex + 1}</h3>
+        <pre>${questions[currentQuestionIndex]}</pre>
+        <div id="answerBox" style="border:1px solid black;padding:10px;min-height:60px;"></div>
+        <hr>
+    `;
+
+    speak("Question " + (currentQuestionIndex + 1) + ". " + questions[currentQuestionIndex], 0.8);
+
+    setTimeout(() => {
+        speak("Question completed. You may answer now.");
+        startListening();
+    }, 3000);
+}
+
+function startListening() {
+
+    finalTranscript = "";
+    audioChunks = [];
+
+    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "en-IN";
+    recognition.interimResults = false;
+    recognition.continuous = true;
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = e => {
+            audioChunks.push(e.data);
+        };
+
+        mediaRecorder.start();
+        recognition.start();
+    });
+
+    recognition.onresult = function(event) {
+
+        let transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+
+        if (transcript.includes("repeat question")) {
+            speak("Repeating question.");
+            showQuestion();
+            return;
+        }
+
+        if (transcript.includes("blank")) {
+            speak("Question skipped.");
+            allAnswers.push("BLANK");
+            recognition.stop();
+            mediaRecorder.stop();
+            currentQuestionIndex++;
+            setTimeout(showQuestion, 1000);
+            return;
+        }
+
+        if (transcript.includes("answer completed")) {
+
+            recognition.stop();
+            mediaRecorder.stop();
+
+            mediaRecorder.onstop = function() {
+
+                let audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+                let audioURL = URL.createObjectURL(audioBlob);
+
+                document.getElementById("answerBox").innerHTML =
+                    "<b>Your Answer:</b><br>" +
+                    finalTranscript +
+                    "<br><br><audio controls src='" + audioURL + "'></audio>";
+
+                allAnswers.push(finalTranscript);
+
+                currentQuestionIndex++;
+                setTimeout(showQuestion, 1500);
+            };
+
+        } else {
+            finalTranscript += " " + transcript;
+        }
+    };
+}
+
+function checkBlanks() {
+
+    if (allAnswers.includes("BLANK")) {
+        speak("You have unanswered questions. Please review.");
+    } else {
+        speak("Exam completed. Submitting for evaluation.");
+    }
+
+    submitExam();
+}
+
+function submitExam() {
+
+    fetch("/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            questions: questions,
+            answers: allAnswers
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById("examArea").innerHTML =
+            "<h3>Evaluation Result</h3><pre>" + data.result + "</pre>";
+        speak("Evaluation completed. Please check your result.");
+    });
+}
+
+</script>
+
+</body>
+</html>
