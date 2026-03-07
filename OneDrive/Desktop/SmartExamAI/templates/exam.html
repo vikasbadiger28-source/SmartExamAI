@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Smart Exam AI</title>
+</head>
+<body>
+
+    <h1>Smart Exam AI 🎓</h1>
+
+    <form method="POST" action="/generate">
+        <label>Enter Subject:</label>
+        <input type="text" name="subject" required>
+        <br><br>
+
+        <label>Total Marks:</label>
+        <input type="number" name="marks" required>
+        <br><br>
+
+        <button type="submit">Generate Exam</button>
+    </form>
+
+    {% if questions %}
+        <h2>Generated Question Paper</h2>
+        <p><strong>Subject:</strong> {{ subject }}</p>
+        <p><strong>Total Marks:</strong> {{ marks }}</p>
+
+        <ul>
+            {% for q in questions %}
+                <li>{{ q }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+</body>
+</html>
