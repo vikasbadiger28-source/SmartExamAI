@@ -7,9 +7,9 @@ import os
 app = Flask(__name__)
 
 # ---------- GROQ CLIENT ----------
-client = Groq(
-    api_key=os.environ.get("GROQ_API_KEY")
-)
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+
+client = Groq(api_key=GROQ_API_KEY)
 
 # ---------- PDF TEXT EXTRACTION ----------
 def extract_text_from_pdf(pdf_file):
@@ -31,6 +31,9 @@ def extract_text_from_pdf(pdf_file):
 
 # ---------- QUESTION GENERATION ----------
 def generate_questions(notes_text, mcq_count, two_mark_count, difficulty):
+
+    if not notes_text:
+        return "No readable text found in the uploaded PDF."
 
     prompt = f"""
 You are a professional university exam paper setter.
@@ -80,7 +83,7 @@ def index():
 
             mcq_count = int(request.form.get("mcqCount", 0))
             two_mark_count = int(request.form.get("twoMarkCount", 0))
-            difficulty = request.form.get("difficulty")
+            difficulty = request.form.get("difficulty", "medium")
 
             notes_text = extract_text_from_pdf(pdf_file)
 
@@ -106,8 +109,9 @@ def index():
 def evaluate():
 
     data = request.json
-    questions = data["questions"]
-    answers = data["answers"]
+
+    questions = data.get("questions", "")
+    answers = data.get("answers", "")
 
     prompt = f"""
 You are an exam evaluator.
@@ -145,6 +149,7 @@ Student Answers:
     return jsonify({"result": result})
 
 
+# ---------- APP RUN ----------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
