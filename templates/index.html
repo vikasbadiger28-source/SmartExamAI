@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>SmartExamAI</title>
+
+<style>
+
+body{
+font-family:Arial;
+margin:40px;
+}
+
+.correct{
+color:green;
+font-weight:bold;
+font-size:20px;
+}
+
+.wrong{
+color:red;
+font-weight:bold;
+font-size:20px;
+}
+
+.questionBox{
+margin-bottom:30px;
+padding:15px;
+border:1px solid #ddd;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h2>Upload Notes PDF</h2>
+
+<form method="POST" enctype="multipart/form-data">
+
+<input type="file" name="file" required><br><br>
+
+<label>MCQ:</label>
+<input type="number" name="mcqCount" value="2"><br><br>
+
+<label>2 Mark Questions:</label>
+<input type="number" name="twoMarkCount" value="2"><br><br>
+
+<select name="difficulty">
+<option>Easy</option>
+<option>Medium</option>
+<option>Hard</option>
+</select>
+
+<br><br>
+
+<button type="submit">Generate Questions</button>
+
+</form>
+
+<hr>
+
+{% if question_list %}
+
+<button onclick="startExam()">Start Voice Exam</button>
+
+<div id="examArea"></div>
+
+{% endif %}
+
+<script>
+
+let questions = {{ question_list | tojson | safe }};
+let answers = new Array(questions.length).fill("");
+
+let current = 0;
+let recognition;
+
+function speak(text){
+
+let speech = new SpeechSynthesisUtterance(text)
+speech.rate = 0.9
+speech.lang="en-US"
+
+speechSynthesis.cancel()
+speechSynthesis.speak(speech)
+
+}
+
+function startExam(){
+
+startVoice()
+
+speak("Hello student. Welcome to Smart Exam AI.")
+
+setTimeout(()=>{
+showQuestion()
+},2000)
+
+}
+
+function startVoice(){
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+recognition = new SpeechRecognition()
+
+recognition.continuous = false
+recognition.interimResults = false
+recognition.lang = "en-US"
+
+recognition.onresult = function(event){
+
+let text = event.results[0][0].transcript.toLowerCase()
+
+if(text.includes("answer completed")){
+
+nextQuestion()
+
+}else{
+
+answers[current] += text
+
+}
+
+}
+
+recognition.start()
+
+}
+
+function showQuestion(){
+
+if(current >= questions.length){
+
+finishExam()
+return
+
+}
+
+document.getElementById("examArea").innerHTML=
+
+`
+<h3>Question ${current+1}</h3>
+<pre>${questions[current]}</pre>
+<p><b>Say 'answer completed' when finished</b></p>
+`
+
+speak("Question " + (current+1))
+
+setTimeout(()=>{
+speak(questions[current])
+},1000)
+
+recognition.start()
+
+}
+
+function nextQuestion(){
+
+current++
+
+setTimeout(()=>{
+showQuestion()
+},1000)
+
+}
+
+function finishExam(){
+
+fetch("/evaluate",{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+questions:questions,
+answers:answers
+})
+
+})
+
+.then(res=>res.json())
+
+.then(data=>{
+
+let html = "<h2>Exam Results</h2>"
+
+data.results.forEach((r)=>{
+
+html += `<div class="questionBox">`
+
+html += `<h3>Question ${r.question}</h3>`
+html += `<p>Your Answer: ${r.student_answer}</p>`
+
+if(r.correct){
+
+html += `<p class="correct">✔ Correct</p>`
+
+}else{
+
+html += `<p class="wrong">❌ Wrong</p>`
+html += `<p class="correct">Correct: ${r.correct_answer}</p>`
+
+}
+
+html += `</div>`
+
+})
+
+html += `<h2>Score: ${data.percentage}%</h2>`
+
+document.getElementById("examArea").innerHTML = html
+
+})
+
+}
+
+</script>
+
+</body>
+</html>
