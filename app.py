@@ -40,13 +40,18 @@ def generate_questions(notes_text, mcq_count, two_mark_count, difficulty):
     prompt = f"""
 Generate exam questions from the notes.
 
-Rules:
-- Do NOT give answers
-- Number questions clearly
+Return ONLY questions.
+
+Format EXACTLY like this:
+
+1. Question text
+2. Question text
+3. Question text
 
 Generate:
-{mcq_count} MCQs
-{two_mark_count} short questions
+{mcq_count} MCQs and {two_mark_count} short questions.
+
+Difficulty: {difficulty}
 
 Notes:
 {notes_text}
@@ -87,7 +92,9 @@ def index():
                 difficulty
             )
 
-            blocks = re.split(r'\n(?=\d+\.)', questions)
+            # better splitting
+            blocks = re.findall(r"\d+\.\s.*?(?=\n\d+\.|\Z)", questions, re.S)
+
             question_list = [b.strip() for b in blocks if b.strip()]
 
     return render_template(
@@ -125,7 +132,7 @@ Evaluate the answers.
 
 Return ONLY JSON.
 
-Example format:
+Format:
 
 {{
 "results":[
