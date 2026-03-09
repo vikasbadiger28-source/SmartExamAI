@@ -1,283 +1,187 @@
-<!DOCTYPE html>
-<html>
-<head>
+from flask import Flask, render_template, request, jsonify
+from groq import Groq
+import fitz
+import re
+import os
+import json
+from dotenv import load_dotenv
 
-<title>SmartExamAI</title>
+load_dotenv()
 
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+app = Flask(__name__)
 
-<style>
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-body{
-font-family:Arial;
-margin:30px;
-}
 
-.correct{
-color:green;
-font-weight:bold;
-font-size:20px;
-}
+# ---------- PDF TEXT ----------
+def extract_text_from_pdf(pdf_file):
 
-.wrong{
-color:red;
-font-weight:bold;
-font-size:20px;
-}
+    text = ""
 
-.questionBox{
-margin-bottom:30px;
-padding:15px;
-border:1px solid #ddd;
-}
+    try:
+        pdf = fitz.open(stream=pdf_file.read(), filetype="pdf")
 
-button{
-padding:10px;
-margin:5px;
-}
+        for page in pdf:
+            text += page.get_text("text")
 
-textarea{
-width:100%;
-height:100px;
-}
+        pdf.close()
 
-</style>
+    except Exception as e:
+        print("PDF Error:", e)
 
-</head>
+    return text[:2000]
 
-<body>
 
-<h2>Upload Notes PDF</h2>
+# ---------- QUESTION GENERATION ----------
+def generate_questions(notes_text, mcq_count, two_mark_count, difficulty):
 
-<form method="POST" enctype="multipart/form-data">
+    total_questions = mcq_count + two_mark_count
 
-<input type="file" name="file" required><br><br>
+    prompt = f"""
+Generate EXACTLY {total_questions} questions from the notes.
 
-<label>MCQ:</label>
-<input type="number" name="mcqCount" value="2"><br><br>
+Rules:
+- First {mcq_count} must be MCQ questions
+- Each MCQ must contain 4 options (A, B, C, D)
+- Remaining {two_mark_count} must be short answer questions
+- Do NOT generate more than {total_questions}
 
-<label>2 Mark Questions:</label>
-<input type="number" name="twoMarkCount" value="2"><br><br>
+Format exactly like this:
 
-<select name="difficulty">
-<option>Easy</option>
-<option>Medium</option>
-<option>Hard</option>
-</select>
+1. Question text
+A) option
+B) option
+C) option
+D) option
 
-<br><br>
+2. Question text
 
-<button type="submit">Generate Questions</button>
+3. Question text
 
-</form>
+Difficulty: {difficulty}
 
-<hr>
+Notes:
+{notes_text}
+"""
 
-{% if question_list %}
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.5
+    )
 
-<h3>Generated Questions</h3>
+    return response.choices[0].message.content
 
-<div id="questionPreview">
 
-{% for q in question_list %}
-<div class="questionBox">
-<b>Question {{loop.index}}</b>
-<p>{{q}}</p>
-</div>
-{% endfor %}
+# ---------- MAIN ----------
+@app.route("/", methods=["GET", "POST"])
+def index():
 
-</div>
+    questions = ""
+    question_list = []
 
-<button onclick="startExam()">Start Exam</button>
+    if request.method == "POST":
 
-<hr>
+        pdf_file = request.files.get("file")
 
-<div id="examArea"></div>
+        if pdf_file:
 
-{% endif %}
+            mcq_count = int(request.form.get("mcqCount", 2))
+            two_mark_count = int(request.form.get("twoMarkCount", 2))
+            difficulty = request.form.get("difficulty", "Medium")
 
-<script>
+            total_questions = mcq_count + two_mark_count
 
-let questions = {{ question_list | tojson | safe }};
-let answers = new Array(questions.length).fill("");
+            notes_text = extract_text_from_pdf(pdf_file)
 
-let current = 0;
-let recognition;
+            questions = generate_questions(
+                notes_text,
+                mcq_count,
+                two_mark_count,
+                difficulty
+            )
 
-function speak(text){
+            blocks = re.findall(r"\d+\.\s.*?(?=\n\d+\.|\Z)", questions, re.S)
 
-let speech = new SpeechSynthesisUtterance(text)
-speech.rate = 0.9
-speech.lang="en-US"
+            question_list = [b.strip() for b in blocks if b.strip()]
 
-speechSynthesis.cancel()
-speechSynthesis.speak(speech)
+            # ✅ LIMIT QUESTIONS (prevents AI giving extra)
+            question_list = question_list[:total_questions]
 
-}
+    return render_template(
+        "index.html",
+        questions=questions,
+        question_list=question_list
+    )
 
-function startExam(){
 
-current = 0
-showQuestion()
+# ---------- EVALUATION ----------
+@app.route("/evaluate", methods=["POST"])
+def evaluate():
 
-}
+    data = request.json
+    questions = data.get("questions", [])
+    answers = data.get("answers", [])
 
-function showQuestion(){
+    qa_text = ""
 
-if(current >= questions.length){
+    for i in range(len(questions)):
 
-document.getElementById("examArea").innerHTML=
+        student_answer = answers[i] if answers[i] else "Blank"
 
-`
-<h2>Exam Completed</h2>
-<button onclick="finishExam()">Submit Exam</button>
-`
+        qa_text += f"""
+Question {i+1}:
+{questions[i]}
 
-return
-}
+Student Answer:
+{student_answer}
+"""
 
-document.getElementById("examArea").innerHTML=
+    prompt = f"""
+Evaluate the answers.
 
-`
-<h3>Question ${current+1}</h3>
+Return ONLY JSON.
 
-<pre>${questions[current]}</pre>
+Format:
 
-<textarea id="answerBox"></textarea>
+{{
+"results":[
+{{
+"question":1,
+"student_answer":"...",
+"correct_answer":"...",
+"correct":true
+}}
+],
+"percentage":80
+}}
 
-<br>
+Questions and answers:
 
-<button onclick="repeatQuestion()">Repeat Question</button>
-<button onclick="startAnswer()">Start Answer</button>
-<button onclick="stopAnswer()">Stop Answer</button>
-<button onclick="nextQuestion()">Next Question</button>
+{qa_text}
+"""
 
-`
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2
+    )
 
-speak("Question " + (current+1))
-setTimeout(()=>{ speak(questions[current]) },1000)
+    result_text = response.choices[0].message.content
 
-}
+    try:
+        json_match = re.search(r"\{.*\}", result_text, re.S)
+        result_json = json.loads(json_match.group())
 
-function repeatQuestion(){
+    except:
+        result_json = {
+            "results": [],
+            "percentage": 0
+        }
 
-speak(questions[current])
+    return jsonify(result_json)
 
-}
 
-function startAnswer(){
-
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-recognition = new SpeechRecognition()
-
-recognition.continuous = true
-recognition.interimResults = false
-recognition.lang = "en-US"
-
-recognition.onresult = function(event){
-
-let text = event.results[event.results.length-1][0].transcript
-
-let box = document.getElementById("answerBox")
-
-box.value += text + " "
-
-}
-
-recognition.start()
-
-}
-
-function stopAnswer(){
-
-recognition.stop()
-
-answers[current] = document.getElementById("answerBox").value
-
-}
-
-function nextQuestion(){
-
-answers[current] = document.getElementById("answerBox").value
-
-current++
-
-showQuestion()
-
-}
-
-function finishExam(){
-
-fetch("/evaluate",{
-
-method:"POST",
-
-headers:{
-"Content-Type":"application/json"
-},
-
-body:JSON.stringify({
-questions:questions,
-answers:answers
-})
-
-})
-
-.then(res=>res.json())
-
-.then(data=>{
-
-let html = "<h2>Exam Result</h2>"
-
-html += `<h3>Score: ${data.percentage}%</h3>`
-
-html += `<button onclick="showCorrections()">View Corrections</button>`
-
-html += `<div id="correctionArea" style="display:none"></div>`
-
-document.getElementById("examArea").innerHTML = html
-
-window.resultData = data
-
-})
-
-}
-
-function showCorrections(){
-
-let data = window.resultData
-
-let html=""
-
-data.results.forEach((r)=>{
-
-html += `<div class="questionBox">`
-
-html += `<h3>Question ${r.question}</h3>`
-html += `<p>Your Answer: ${r.student_answer}</p>`
-
-if(r.correct){
-
-html += `<p class="correct">✔ Correct</p>`
-
-}else{
-
-html += `<p class="wrong">❌ Wrong</p>`
-html += `<p class="correct">Correct: ${r.correct_answer}</p>`
-
-}
-
-html += `</div>`
-
-})
-
-document.getElementById("correctionArea").innerHTML = html
-document.getElementById("correctionArea").style.display="block"
-
-}
-
-</script>
-
-</body>
-</html>
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
