@@ -10,9 +10,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-client = Groq(api_key=GROQ_API_KEY)
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 
 # ---------- PDF TEXT ----------
@@ -42,14 +40,15 @@ Generate exam questions from the notes.
 
 Return ONLY questions.
 
-Format EXACTLY like this:
+Format exactly like:
 
 1. Question text
 2. Question text
 3. Question text
 
 Generate:
-{mcq_count} MCQs and {two_mark_count} short questions.
+{mcq_count} MCQs
+{two_mark_count} short questions
 
 Difficulty: {difficulty}
 
@@ -92,7 +91,6 @@ def index():
                 difficulty
             )
 
-            # better splitting
             blocks = re.findall(r"\d+\.\s.*?(?=\n\d+\.|\Z)", questions, re.S)
 
             question_list = [b.strip() for b in blocks if b.strip()]
@@ -124,7 +122,6 @@ Question {i+1}:
 
 Student Answer:
 {student_answer}
-
 """
 
     prompt = f"""
