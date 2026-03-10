@@ -25,7 +25,7 @@ def extract_text_from_pdf(pdf_file):
 
     pdf.close()
 
-    return text[:2000]
+    return text[:2500]
 
 
 def generate_questions(notes_text, mcq_count, two_mark_count, difficulty):
@@ -35,14 +35,19 @@ def generate_questions(notes_text, mcq_count, two_mark_count, difficulty):
     seed = random.randint(1,999999)
 
     prompt = f"""
-Generate EXACTLY {total_questions} RANDOM exam questions.
+You are an AI exam paper generator.
 
-Rules:
-- First {mcq_count} must be MCQ questions
-- Each MCQ must contain 4 options (A,B,C,D)
-- Remaining {two_mark_count} must be short answer
-- Questions must be different every time
-- Avoid repeating similar questions
+Generate EXACTLY {total_questions} RANDOM questions from the notes.
+
+RULES:
+
+1. First {mcq_count} must be MCQ questions
+2. Each MCQ must contain exactly 4 options
+3. Remaining {two_mark_count} must be 2-mark short answer questions
+4. Questions must be DIFFERENT every time
+5. Avoid repeating the same concept
+6. Shuffle topics
+7. Do NOT include answers
 
 Random Seed: {seed}
 
@@ -51,23 +56,29 @@ Difficulty: {difficulty}
 Notes:
 {notes_text}
 
-Format exactly:
+FORMAT STRICTLY:
 
-1. Question
+1. Question text
 A) option
 B) option
 C) option
 D) option
 
-2. Question
+2. Question text
+A) option
+B) option
+C) option
+D) option
 
-3. Question
+3. Question text
+
+4. Question text
 """
 
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[{"role":"user","content":prompt}],
-        temperature=0.9
+        temperature=1
     )
 
     return response.choices[0].message.content
@@ -126,13 +137,21 @@ Student Answer:
 """
 
     prompt=f"""
-Evaluate student answers intelligently.
+Evaluate student answers.
 
-If the meaning is correct mark as correct even if wording is different.
+RULES:
+
+1. MCQ:
+Return correct answer and whether student is correct.
+
+2. 2 MARK QUESTIONS:
+Extract 4 important keywords from the correct answer.
+Check how many keywords exist in student answer.
+Give marks out of 2 based on keyword match.
 
 Return ONLY JSON.
 
-Format:
+FORMAT:
 
 {{
 "results":[
@@ -140,7 +159,10 @@ Format:
 "question":1,
 "student_answer":"...",
 "correct_answer":"...",
-"correct":true
+"correct":true,
+"keywords":["word1","word2","word3","word4"],
+"keyword_match":2,
+"marks":1
 }}
 ],
 "percentage":80

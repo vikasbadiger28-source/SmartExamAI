@@ -1,5 +1,6 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html>
+
 <head>
 
 <title>SmartExamAI</title>
@@ -13,32 +14,55 @@ font-family:Arial;
 margin:30px;
 }
 
+.questionBox{
+margin-bottom:25px;
+padding:15px;
+border:1px solid #ddd;
+border-radius:8px;
+}
+
 .correct{
 color:green;
 font-weight:bold;
-font-size:20px;
+font-size:18px;
 }
 
 .wrong{
 color:red;
 font-weight:bold;
-font-size:20px;
-}
-
-.questionBox{
-margin-bottom:30px;
-padding:15px;
-border:1px solid #ddd;
+font-size:18px;
 }
 
 button{
-padding:10px;
+padding:10px 16px;
 margin:5px;
+cursor:pointer;
+border:none;
+background:#2c7be5;
+color:white;
+border-radius:5px;
+}
+
+button:hover{
+background:#1a5fd1;
 }
 
 textarea{
 width:100%;
 height:100px;
+padding:10px;
+}
+
+.option{
+margin-left:15px;
+}
+
+.keyword{
+background:#e8f5e9;
+padding:4px 8px;
+border-radius:5px;
+margin:3px;
+display:inline-block;
 }
 
 </style>
@@ -82,7 +106,7 @@ height:100px;
 {% for q in question_list %}
 <div class="questionBox">
 <b>Question {{loop.index}}</b>
-<p>{{q}}</p>
+<p style="white-space:pre-line">{{q}}</p>
 </div>
 {% endfor %}
 
@@ -100,13 +124,9 @@ height:100px;
 
 let questions = {{ question_list | tojson | safe }};
 let answers = new Array(questions.length).fill("");
-let recordings = new Array(questions.length).fill(null);
 
 let current = 0;
 let recognition;
-
-let mediaRecorder;
-let audioChunks=[];
 
 function speak(text){
 
@@ -121,14 +141,14 @@ speechSynthesis.speak(speech)
 
 function startExam(){
 
-current = 0
+current=0
 showQuestion()
 
 }
 
 function showQuestion(){
 
-if(current >= questions.length){
+if(current>=questions.length){
 
 document.getElementById("examArea").innerHTML=
 
@@ -140,12 +160,16 @@ document.getElementById("examArea").innerHTML=
 return
 }
 
+let q = questions[current]
+
 document.getElementById("examArea").innerHTML=
 
 `
+<div class="questionBox">
+
 <h3>Question ${current+1}</h3>
 
-<pre>${questions[current]}</pre>
+<p style="white-space:pre-line">${q}</p>
 
 <textarea id="answerBox"></textarea>
 
@@ -156,21 +180,14 @@ document.getElementById("examArea").innerHTML=
 <button onclick="stopAnswer()">Stop Answer</button>
 <button onclick="nextQuestion()">Next Question</button>
 
-<br><br>
-
-<div id="audioArea"></div>
-
+</div>
 `
 
-speak("Question " + (current+1))
+speak("Question "+(current+1))
 
 setTimeout(()=>{
-speak(questions[current])
-},1200)
-
-setTimeout(()=>{
-speak("Question " + (current+1) + " has been completed. You may answer now.")
-},5000)
+speak(q)
+},1000)
 
 }
 
@@ -180,75 +197,43 @@ speak(questions[current])
 
 }
 
-async function startAnswer(){
+function startAnswer(){
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 recognition = new SpeechRecognition()
 
-recognition.continuous = true
-recognition.interimResults = false
-recognition.lang = "en-US"
+recognition.continuous=true
+recognition.interimResults=false
+recognition.lang="en-US"
 
-recognition.onresult = function(event){
+recognition.onresult=function(event){
 
-let text = event.results[event.results.length-1][0].transcript
+let text=event.results[event.results.length-1][0].transcript
 
-let box = document.getElementById("answerBox")
+let box=document.getElementById("answerBox")
 
-box.value += text + " "
+box.value+=text+" "
 
 }
 
 recognition.start()
 
-/* AUDIO RECORDING */
-
-let stream = await navigator.mediaDevices.getUserMedia({audio:true})
-
-mediaRecorder = new MediaRecorder(stream)
-
-audioChunks=[]
-
-mediaRecorder.ondataavailable = e=>{
-audioChunks.push(e.data)
-}
-
-mediaRecorder.start()
-
 }
 
 function stopAnswer(){
 
+if(recognition){
 recognition.stop()
-
-mediaRecorder.stop()
-
-mediaRecorder.onstop=function(){
-
-let blob=new Blob(audioChunks,{type:"audio/webm"})
-let audioURL=URL.createObjectURL(blob)
-
-recordings[current]=audioURL
-
-document.getElementById("audioArea").innerHTML=
-
-`
-<h4>Your Recorded Answer</h4>
-<audio controls src="${audioURL}"></audio>
-`
-
 }
 
-answers[current] = document.getElementById("answerBox").value
-
-speak("Answer for question " + (current+1) + " has been recorded.")
+answers[current]=document.getElementById("answerBox").value
 
 }
 
 function nextQuestion(){
 
-answers[current] = document.getElementById("answerBox").value
+answers[current]=document.getElementById("answerBox").value
 
 current++
 
@@ -277,17 +262,17 @@ answers:answers
 
 .then(data=>{
 
-let html = "<h2>Exam Result</h2>"
+let html="<h2>Exam Result</h2>"
 
-html += `<h3>Score: ${data.percentage}%</h3>`
+html+=`<h3>Score: ${data.percentage}%</h3>`
 
-html += `<button onclick="showCorrections()">View Corrections</button>`
+html+=`<button onclick="showCorrections()">View Corrections</button>`
 
-html += `<div id="correctionArea" style="display:none"></div>`
+html+=`<div id="correctionArea" style="display:none"></div>`
 
-document.getElementById("examArea").innerHTML = html
+document.getElementById("examArea").innerHTML=html
 
-window.resultData = data
+window.resultData=data
 
 })
 
@@ -295,42 +280,52 @@ window.resultData = data
 
 function showCorrections(){
 
-let data = window.resultData
+let data=window.resultData
 
 let html=""
 
-data.results.forEach((r,i)=>{
+data.results.forEach((r)=>{
 
-html += `<div class="questionBox">`
+html+=`<div class="questionBox">`
 
-html += `<h3>Question ${r.question}</h3>`
-html += `<p>Your Answer: ${r.student_answer}</p>`
+html+=`<h3>Question ${r.question}</h3>`
 
-if(recordings[i]){
+html+=`<p><b>Your Answer:</b> ${r.student_answer}</p>`
 
-html += `
-<h4>Your Voice Recording</h4>
-<audio controls src="${recordings[i]}"></audio>
-`
+if(r.keywords){
+
+html+=`<p><b>Keywords Expected:</b></p>`
+
+r.keywords.forEach(k=>{
+html+=`<span class="keyword">${k}</span>`
+})
+
+html+=`<br><br>`
+
+html+=`<p><b>Keywords Found:</b> ${r.keyword_match}</p>`
+
+html+=`<p><b>Marks Awarded:</b> ${r.marks}/2</p>`
 
 }
 
 if(r.correct){
 
-html += `<p class="correct">✔ Correct</p>`
+html+=`<p class="correct">✔ Correct</p>`
 
 }else{
 
-html += `<p class="wrong">❌ Wrong</p>`
-html += `<p class="correct">Correct: ${r.correct_answer}</p>`
+html+=`<p class="wrong">❌ Wrong</p>`
+
+html+=`<p class="correct"><b>Correct Answer:</b> ${r.correct_answer}</p>`
 
 }
 
-html += `</div>`
+html+=`</div>`
 
 })
 
-document.getElementById("correctionArea").innerHTML = html
+document.getElementById("correctionArea").innerHTML=html
+
 document.getElementById("correctionArea").style.display="block"
 
 }
@@ -338,4 +333,5 @@ document.getElementById("correctionArea").style.display="block"
 </script>
 
 </body>
+
 </html>
