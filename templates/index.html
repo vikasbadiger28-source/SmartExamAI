@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html>
 <head>
 
@@ -100,9 +100,13 @@ height:100px;
 
 let questions = {{ question_list | tojson | safe }};
 let answers = new Array(questions.length).fill("");
+let recordings = new Array(questions.length).fill(null);
 
 let current = 0;
 let recognition;
+
+let mediaRecorder;
+let audioChunks=[];
 
 function speak(text){
 
@@ -152,6 +156,10 @@ document.getElementById("examArea").innerHTML=
 <button onclick="stopAnswer()">Stop Answer</button>
 <button onclick="nextQuestion()">Next Question</button>
 
+<br><br>
+
+<div id="audioArea"></div>
+
 `
 
 speak("Question " + (current+1))
@@ -172,7 +180,7 @@ speak(questions[current])
 
 }
 
-function startAnswer(){
+async function startAnswer(){
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -194,11 +202,43 @@ box.value += text + " "
 
 recognition.start()
 
+/* AUDIO RECORDING */
+
+let stream = await navigator.mediaDevices.getUserMedia({audio:true})
+
+mediaRecorder = new MediaRecorder(stream)
+
+audioChunks=[]
+
+mediaRecorder.ondataavailable = e=>{
+audioChunks.push(e.data)
+}
+
+mediaRecorder.start()
+
 }
 
 function stopAnswer(){
 
 recognition.stop()
+
+mediaRecorder.stop()
+
+mediaRecorder.onstop=function(){
+
+let blob=new Blob(audioChunks,{type:"audio/webm"})
+let audioURL=URL.createObjectURL(blob)
+
+recordings[current]=audioURL
+
+document.getElementById("audioArea").innerHTML=
+
+`
+<h4>Your Recorded Answer</h4>
+<audio controls src="${audioURL}"></audio>
+`
+
+}
 
 answers[current] = document.getElementById("answerBox").value
 
@@ -259,12 +299,21 @@ let data = window.resultData
 
 let html=""
 
-data.results.forEach((r)=>{
+data.results.forEach((r,i)=>{
 
 html += `<div class="questionBox">`
 
 html += `<h3>Question ${r.question}</h3>`
 html += `<p>Your Answer: ${r.student_answer}</p>`
+
+if(recordings[i]){
+
+html += `
+<h4>Your Voice Recording</h4>
+<audio controls src="${recordings[i]}"></audio>
+`
+
+}
 
 if(r.correct){
 
