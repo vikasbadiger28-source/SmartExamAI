@@ -53,10 +53,6 @@ height:100px;
 padding:10px;
 }
 
-.option{
-margin-left:15px;
-}
-
 .keyword{
 background:#e8f5e9;
 padding:4px 8px;
@@ -128,27 +124,60 @@ let answers = new Array(questions.length).fill("");
 let current = 0;
 let recognition;
 
-function speak(text){
+/* -------- SMART SPEECH SYSTEM -------- */
 
-let speech = new SpeechSynthesisUtterance(text)
-speech.rate = 0.9
-speech.lang="en-US"
+function speakLines(lines){
 
 speechSynthesis.cancel()
+
+let index = 0
+
+function speakNext(){
+
+if(index >= lines.length) return
+
+let speech = new SpeechSynthesisUtterance(lines[index])
+
+speech.rate = 0.9
+speech.lang = "en-US"
+
+speech.onend = function(){
+
+index++
+speakNext()
+
+}
+
 speechSynthesis.speak(speech)
 
 }
 
+speakNext()
+
+}
+
+function readQuestion(q){
+
+let lines = q.split("\n").filter(l => l.trim() !== "")
+
+lines.unshift("Question " + (current+1))
+
+speakLines(lines)
+
+}
+
+/* -------- EXAM SYSTEM -------- */
+
 function startExam(){
 
-current=0
+current = 0
 showQuestion()
 
 }
 
 function showQuestion(){
 
-if(current>=questions.length){
+if(current >= questions.length){
 
 document.getElementById("examArea").innerHTML=
 
@@ -183,19 +212,17 @@ document.getElementById("examArea").innerHTML=
 </div>
 `
 
-speak("Question "+(current+1))
-
-setTimeout(()=>{
-speak(q)
-},1000)
+readQuestion(q)
 
 }
 
 function repeatQuestion(){
 
-speak(questions[current])
+readQuestion(questions[current])
 
 }
+
+/* -------- VOICE ANSWER -------- */
 
 function startAnswer(){
 
@@ -203,17 +230,17 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 
 recognition = new SpeechRecognition()
 
-recognition.continuous=true
-recognition.interimResults=false
-recognition.lang="en-US"
+recognition.continuous = true
+recognition.interimResults = false
+recognition.lang = "en-US"
 
-recognition.onresult=function(event){
+recognition.onresult = function(event){
 
-let text=event.results[event.results.length-1][0].transcript
+let text = event.results[event.results.length-1][0].transcript
 
-let box=document.getElementById("answerBox")
+let box = document.getElementById("answerBox")
 
-box.value+=text+" "
+box.value += text + " "
 
 }
 
@@ -227,19 +254,21 @@ if(recognition){
 recognition.stop()
 }
 
-answers[current]=document.getElementById("answerBox").value
+answers[current] = document.getElementById("answerBox").value
 
 }
 
 function nextQuestion(){
 
-answers[current]=document.getElementById("answerBox").value
+answers[current] = document.getElementById("answerBox").value
 
 current++
 
 showQuestion()
 
 }
+
+/* -------- EVALUATION -------- */
 
 function finishExam(){
 
@@ -325,7 +354,6 @@ html+=`</div>`
 })
 
 document.getElementById("correctionArea").innerHTML=html
-
 document.getElementById("correctionArea").style.display="block"
 
 }
@@ -333,5 +361,4 @@ document.getElementById("correctionArea").style.display="block"
 </script>
 
 </body>
-
 </html>
