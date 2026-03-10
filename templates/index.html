@@ -155,7 +155,14 @@ document.getElementById("examArea").innerHTML=
 `
 
 speak("Question " + (current+1))
-setTimeout(()=>{ speak(questions[current]) },1000)
+
+setTimeout(()=>{
+speak(questions[current])
+},1200)
+
+setTimeout(()=>{
+speak("Question " + (current+1) + " has been completed. You may answer now.")
+},5000)
 
 }
 
@@ -194,6 +201,8 @@ function stopAnswer(){
 recognition.stop()
 
 answers[current] = document.getElementById("answerBox").value
+
+speak("Answer for question " + (current+1) + " has been recorded.")
 
 }
 
